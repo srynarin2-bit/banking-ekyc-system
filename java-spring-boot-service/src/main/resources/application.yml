@@ -4,6 +4,7 @@ spring:
     username: ${SPRING_DATASOURCE_USERNAME}
     password: ${SPRING_DATASOURCE_PASSWORD}
     driver-class-name: org.postgresql.Driver
+  
   jpa:
     hibernate:
       ddl-auto: update
@@ -12,5 +13,5 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
 
-  app:
-  ai-service-url: ${PYTHON_AI_URL}     
+app:
+  python-ai-url: ${PYTHON_AI_URL}

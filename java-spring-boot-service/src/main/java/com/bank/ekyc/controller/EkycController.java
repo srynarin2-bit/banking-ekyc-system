@@ -29,12 +29,15 @@ public class EkycController {
             headers.setContentType(MediaType.MULTIPART_FORM_DATA);
 
             MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
-            body.add("id_card", new ByteArrayResource(idCard.getBytes()) {
+            
+            // ⚠️ ប្តូរពី "id_card" មកជា "idCard" វិញ ដើម្បីឱ្យត្រូវគ្នាជាមួយ Python FastAPI Parameter
+            body.add("idCard", new ByteArrayResource(idCard.getBytes()) {
                 @Override
                 public String getFilename() {
                     return idCard.getOriginalFilename();
                 }
             });
+            
             body.add("selfie", new ByteArrayResource(selfie.getBytes()) {
                 @Override
                 public String getFilename() {
@@ -44,8 +47,6 @@ public class EkycController {
 
             HttpEntity<MultiValueMap<String, Object>> requestEntity = new HttpEntity<>(body, headers);
             ResponseEntity<String> aiResponse = restTemplate.postForEntity(pythonAiUrl, requestEntity, String.class);
-
-            // Here you can parse response and securely store data into PostgreSQL via Spring Data JPA
 
             return ResponseEntity.status(aiResponse.getStatusCode()).body(aiResponse.getBody());
         } catch (Exception e) {

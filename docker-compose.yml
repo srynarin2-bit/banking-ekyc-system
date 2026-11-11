@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  postgres-db:
+    image: postgres:15-alpine
+    container_name: ekyc_postgres
+    environment:
+      POSTGRES_DB: ekyc_db
+      POSTGRES_USER: ekyc_user
+      POSTGRES_PASSWORD: secure_password_123
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  python-ai:
+    build: ./python-ai-service
+    container_name: ekyc_python_ai
+    ports:
+      - "8000:8000"
+
+  spring-backend:
+    build: ./java-spring-boot-service
+    container_name: ekyc_spring_backend
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-db:5432/ekyc_db
+      - SPRING_DATASOURCE_USERNAME=ekyc_user
+      - SPRING_DATASOURCE_PASSWORD=secure_password_123
+      - PYTHON_AI_URL=http://python-ai:8000/api/v1/ai/verify-ekyc
+    depends_on:
+      - postgres-db
+      - python-ai

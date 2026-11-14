@@ -3,13 +3,14 @@ from pydantic import BaseModel
 import cv2
 import numpy as np
 import easyocr
-import re
+from deepface import DeepFace
+import os
 
-app = FastAPI(title="eKYC Real AI Engine", version="2.0")
+app = FastAPI(title="eKYC Pro Banking AI Engine", version="3.0")
 
-# ចាប់ផ្តើម Easyocr Reader (รองรับភាសាអង់គ្លេស និងខ្មែរ/ឡាតាំង)
-# កត់សម្គាល់៖ ការ લોដ Model ដំបូងអាចស៊ីពេលបន្តិចពេល Docker Build
+print("Initializing EasyOCR...")
 reader = easyocr.Reader(['en'], gpu=False)
+print("AI Engine Ready!")
 
 class eKYCResponse(BaseModel):
     status: str
@@ -18,47 +19,50 @@ class eKYCResponse(BaseModel):
     extracted_data: dict
 
 @app.post("/api/v1/ai/verify-ekyc", response_model=eKYCResponse)
-async def verify_ekyc(id_card: UploadFile = File(...), selfie: UploadFile = File(...)):
+async def verify_ekyc(idCard: UploadFile = File(...), selfie: UploadFile = File(...)):
+    id_path = f"temp_id_{idCard.filename}"
+    selfie_path = f"temp_selfie_{selfie.filename}"
+    
     try:
-        id_bytes = await id_card.read()
-        selfie_bytes = await selfie.read()
+        # ១. រក្សាទុករូបភាពជា File បណ្តោះអាសន្នសម្រាប់ DeepFace វិភាគ
+        with open(id_path, "wb") as buffer:
+            buffer.write(await idCard.read())
+        with open(selfie_path, "wb") as buffer:
+            buffer.write(await selfie.read())
+
+        # ២. ដំណើរការ OCR ដើម្បីទាញយកទិន្នន័យពីអត្តសញ្ញាណប័ណ្ណ
+        ocr_results = reader.readtext(id_path, detail=0)
+        full_text = " ".join(ocr_results)
+
+        # ៣. ធ្វើ Real Face Matching រវាងអត្តសញ្ញាណប័ណ្ណ និង រូប Selfie ផ្ទាល់ខ្លួន
+        # DeepFace verify នឹងប្រៀបធៀបមុខលើ ID Card និង Selfie ថាតើជាមនុស្សតែមួយដែរឬទេ
+        result = DeepFace.verify(img1_path=id_path, img2_path=selfie_path, enforce_detection=False)
         
-        id_np = np.frombuffer(id_bytes, np.uint8)
-        selfie_np = np.frombuffer(selfie_bytes, np.uint8)
+        distance = result["distance"] # កម្រិតខុសគ្នា (ยิ่งน้อยยิ่งដូច)
+        # បំលែង distance ទៅជាเปอร์เซ็นต์ความเหมือน (Similarity Score)
+        match_score = round(max(0.0, (1.0 - distance) * 100), 2)
         
-        img_id = cv2.imdecode(id_np, cv2.IMREAD_COLOR)
-        img_selfie = cv2.imdecode(selfie_np, cv2.IMREAD_COLOR)
+        # កំណត់កម្រិត περα πέρα (Threshold) ឧទាហរណ៍ លើសពី 55% ถือว่าผ่าน
+        is_matched = result["verified"] and match_score >= 50.0
 
-        if img_id is None or img_selfie is None:
-            raise HTTPException(status_code=400, detail="Invalid image encoding.")
-
-        # ១. ដំណើរការ OCR ដើម្បីទាញយកអត្ថបទពីអត្តសញ្ញាណប័ណ្ណ
-        gray_id = cv2.cvtColor(img_id, cv2.COLOR_BGR2GRAY)
-        ocr_results = reader.readtext(gray_id)
-        
-        extracted_texts = [text[1] for text in ocr_results]
-        full_ocr_string = " ".join(extracted_texts)
-
-        # ២. ទាញយកលេខអត្តសញ្ញាណប័ណ្ណ ឬឈ្មោះតាមរយៈ Regex Pattern ស្វែងរក
-        id_number_match = re.search(r'\d{9,12}', full_ocr_string)
-        id_number = id_number_match.group(0) if id_number_match else "UNKNOWN_ID"
-
-        # ៣. ពិនិត្យ Liveness និង Face Matching (គំរូកម្រិតខ្ពស់ជាមួយ OpenCV structural similarity)
-        # ក្នុង Production អាចប្រើប្រាស់ DeepFace ឬ face_recognition ជំនួសទីនេះ
-        match_score = 92.85 
-        liveness_passed = True
+        # ៤. Liveness Simulation (អាចពង្រីកបន្ថែមដោយ Blink detection)
+        liveness_passed = True 
 
         extracted_data = {
-            "id_number": id_number,
-            "full_raw_text": extracted_texts[:5], # បង្ហាញអត្ថបទខ្លះៗដែល OCR អានបាន
-            "note": "Extracted from real uploaded ID card using EasyOCR"
+            "raw_ocr_text": ocr_results[:6],
+            "note": "Verified using DeepFace & EasyOCR AI"
         }
 
         return {
-            "status": "APPROVED" if liveness_passed and match_score > 80.0 else "REJECTED",
+            "status": "APPROVED" if is_matched and liveness_passed else "REJECTED",
             "face_match_score": match_score,
             "liveness_passed": liveness_passed,
             "extracted_data": extracted_data
         }
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        # លុប File បណ្តោះអាសន្នចេញពី Disk វិញដើម្បីសន្សំ Memory
+        if os.path.exists(id_path): os.remove(id_path)
+        if os.path.exists(selfie_path): os.remove(selfie_path)

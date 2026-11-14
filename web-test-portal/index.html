@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="km">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>eKYC Banking Verification Portal</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f2f5; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        .container { background: #ffffff; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 100%; max-width: 450px; text-align: center; }
+        h2 { color: #0066CC; margin-bottom: 5px; }
+        p.subtitle { color: #666; font-size: 14px; margin-bottom: 25px; }
+        .form-group { margin-bottom: 20px; text-align: left; }
+        label { display: block; font-weight: 600; margin-bottom: 8px; color: #333; }
+        input[type="file"] { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; background: #fafafa; box-sizing: border-box; }
+        .preview-container { margin-top: 10px; display: flex; justify-content: center; }
+        .preview-img { max-width: 100%; height: 140px; object-fit: cover; border-radius: 6px; border: 1px solid #ccc; display: none; }
+        .btn-submit { background-color: #0066CC; color: white; border: none; padding: 12px; width: 100%; font-size: 16px; font-weight: bold; border-radius: 6px; cursor: pointer; transition: background 0.3s; }
+        .btn-submit:hover { background-color: #004b99; }
+        .loading { display: none; margin-top: 15px; color: #0066CC; font-weight: bold; }
+        .result-box { margin-top: 25px; padding: 15px; border-radius: 8px; text-align: left; display: none; }
+        .approved { background-color: #e6f4ea; border: 1px solid #34a853; color: #137333; }
+        .rejected { background-color: #fce8e6; border: 1px solid #ea4335; color: #c5221f; }
+        .json-pre { background: #272c34; color: #a6e22e; padding: 10px; border-radius: 5px; font-size: 12px; overflow-x: auto; max-height: 200px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>ABA eKYC Portal</h2>
+    <p class="subtitle">ប្រព័ន្ធផ្ទៀងផ្ទាត់អត្តសញ្ញាណអតិថិជនតាមបែបឌីជីថល</p>
+
+    <form id="ekycForm">
+        <div class="form-group">
+            <label>១. រូបភាពអត្តសញ្ញាណប័ណ្ណ (National ID / Passport):</label>
+            <input type="file" id="idCard" accept="image/*" required onchange="previewImage(event, 'idPreview')">
+            <div class="preview-container"><img id="idPreview" class="preview-img"></div>
+        </div>
+
+        <div class="form-group">
+            <label>២. រូបថតផ្ទាល់ខ្លួន (Liveness Selfie):</label>
+            <input type="file" id="selfie" accept="image/*" required onchange="previewImage(event, 'selfiePreview')">
+            <div class="preview-container"><img id="selfiePreview" class="preview-img"></div>
+        </div>
+
+        <button type="submit" class="btn-submit">ផ្ញើផ្ទៀងផ្ទាត់ (Submit eKYC)</button>
+    </form>
+
+    <div id="loading" class="loading">⏳ កំពុងដំណើរការ AI ផ្ទៀងផ្ទាត់មុខ និងអាន OCR... សូមរង់ចាំបន្តិច...</div>
+
+    <div id="resultBox" class="result-box">
+        <h3 id="resultStatus" style="margin-top:0;"></h3>
+        <p><strong>Face Match Score:</strong> <span id="scoreText"></span>%</p>
+        <p><strong>Liveness Status:</strong> <span id="livenessText"></span></p>
+        <p><strong>AI Response Data:</strong></p>
+        <pre id="jsonResult" class="json-pre"></pre>
+    </div>
+</div>
+
+<script>
+    function previewImage(event, previewId) {
+        const reader = new FileReader();
+        reader.onload = function(){
+            const output = document.getElementById(previewId);
+            output.src = reader.result;
+            output.style.display = 'block';
+        };
+        reader.readAsDataURL(event.target.files[0]);
+    }
+
+    document.getElementById('ekycForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+
+        const idCardFile = document.getElementById('idCard').files[0];
+        const selfieFile = document.getElementById('selfie').files[0];
+        const loadingDiv = document.getElementById('loading');
+        const resultBox = document.getElementById('resultBox');
+        
+        if (!idCardFile || !selfieFile) {
+            alert('សូមជ្រើសរើសរូបភាពឱ្យបានគ្រប់គ្រាន់!');
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('customerId', 'CUST-' + Math.floor(100000 + Math.random() * 900000));
+        formData.append('idCard', idCardFile);
+        formData.append('selfie', selfieFile);
+
+        loadingDiv.style.display = 'block';
+        resultBox.style.display = 'none';
+
+        try {
+            // 🌐 ភ្ជាប់ទៅកាន់ Spring Boot Backend របស់អ្នកនៅលើ Render
+            const response = await fetch('https://backend-service-ekyc-system.onrender.com/api/v1/banking/ekyc/submit', {
+                method: 'POST',
+                body: formData
+            });
+
+            const data = await response.json();
+            loadingDiv.style.display = 'none';
+
+            resultBox.style.display = 'block';
+            const isApproved = data.status === 'APPROVED';
+            resultBox.className = 'result-box ' + (isApproved ? 'approved' : 'rejected');
+            
+            document.getElementById('resultStatus').innerText = 'STATUS: ' + data.status;
+            document.getElementById('scoreText').innerText = data.face_match_score || 'N/A';
+            document.getElementById('livenessText').innerText = data.liveness_passed ? 'PASSED (Verified)' : 'FAILED';
+            document.getElementById('jsonResult').innerText = JSON.stringify(data, null, 2);
+
+        } catch (error) {
+            loadingDiv.style.display = 'none';
+            alert('មានបញ្ាក្នុងការតភ្ជាប់ទៅកាន់ Backend: ' + error.message);
+        }
+    });
+</script>
+
+</body>
+</html>

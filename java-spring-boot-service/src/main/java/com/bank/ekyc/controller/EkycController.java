@@ -30,7 +30,7 @@ public class EkycController {
 
             MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
             
-            // ⚠️ ប្តូរពី "id_card" មកជា "idCard" វិញ ដើម្បីឱ្យត្រូវគ្នាជាមួយ Python FastAPI Parameter
+            // ផ្ញើไฟล์ idCard ទៅកាន់ Python AI Engine
             body.add("idCard", new ByteArrayResource(idCard.getBytes()) {
                 @Override
                 public String getFilename() {
@@ -38,6 +38,7 @@ public class EkycController {
                 }
             });
             
+            // ផ្ញើไฟล์ selfie ទៅកាន់ Python AI Engine
             body.add("selfie", new ByteArrayResource(selfie.getBytes()) {
                 @Override
                 public String getFilename() {

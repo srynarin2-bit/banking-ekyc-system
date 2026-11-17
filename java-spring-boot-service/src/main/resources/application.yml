@@ -13,5 +13,11 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
 
+  # 💡 បន្ថែមការកំណត់ទំហំဖိုင်អតិបរមាសម្រាប់ eKYC Images
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 20MB
+
 app:
   python-ai-url: ${PYTHON_AI_URL}
